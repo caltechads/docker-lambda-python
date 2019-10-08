@@ -11,6 +11,13 @@ Since this image is built on the`lambci/docker-lambda:python3.6`, it has all the
 > structure and permissions, environment variables, context objects and
 > behaviors – even the user and running process are the same.
 
+## Available image tags in Docker Hub
+
+ * `caltechads/docker-python-lambda:python3.6`: the latest version of the image
+ * `caltechads/docker-python-lambda:python3.6-build1`: the specific tag of latest version of the
+   image.  Use this is you want to pin to a specific build of
+   `caltechads/docker-lambda-python:python:3.6
+
 ## What we added
 
 Here are the differences between this python 3.6 environment and the one from
@@ -30,3 +37,5 @@ Here are the differences between this python 3.6 environment and the one from
   If you define objects outside the function handler's function in AWS, they will
   persist throughout the series of events you present with your mock event
   source mapping
+
+

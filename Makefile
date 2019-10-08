@@ -1,4 +1,9 @@
-VERSION = 0.2.0
+PACKAGE = docker-lambda-python
+IMAGE_TAG = python3.6
+BUILD = 1
+VERSION = $(IMAGE_TAG)-build$(BUILD)
+
+REPOSITORY = caltechads/$(PACKAGE)
 
 #======================================================================
 
@@ -10,18 +15,26 @@ version:
 	@echo ${VERSION}
 
 force-build:
-	docker build --no-cache lambda:python3.6 .
-	docker tag lambda:python3.6 caltechads/lambda:python3.6
-	# Delete dangling container images to help prevent disk bloat.
+	docker build --no-cache -t ${PACKAGE}:${VERSION} .
+	docker tag ${PACKAGE}:${VERSION} ${PACKAGE}:${IMAGE_TAG}
+	docker tag ${PACKAGE}:${VERSION} ${PACKAGE}:${VERSION}
 	docker image prune -f
-	rm -rf common
 
 build:
-	docker build -f Dockerfile -t lambda:python3.6 .
-	docker tag lambda:python3.6 caltechads/lambda:python3.6
-	# Delete dangling container images to help prevent disk bloat.
+	docker build -t ${PACKAGE}:${VERSION} .
+	docker tag ${PACKAGE}:${VERSION} ${PACKAGE}:${IMAGE_TAG}
+	docker tag ${PACKAGE}:${VERSION} ${PACKAGE}:${VERSION}
 	docker image prune -f
-	rm -rf common
+
+tag:
+	docker tag ${PACKAGE}:${IMAGE_TAG} ${REPOSITORY}:${IMAGE_TAG}
+	docker tag ${PACKAGE}:${VERSION} ${REPOSITORY}:${VERSION}
+
+push: tag
+	docker push ${REPOSITORY}
+
+run:
+	docker run -ti --entrypoint bash ${PACKAGE}:${IMAGE_TAG}
 
 dev:
 	docker-compose up

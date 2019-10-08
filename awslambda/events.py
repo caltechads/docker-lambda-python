@@ -1,10 +1,10 @@
 import os
 import sys
 
-from .filesystem import FilesystemEventSource
-from .kinesis import KinesisEventSource
-from .static import EnvironmentEventSource, CommandLineEventSource
-from .logging import eprint
+from awslambda.filesystem import FilesystemEventSource
+from awslambda.kinesis import KinesisEventSource
+from awslambda.static import EnvironmentEventSource, CommandLineEventSource
+from awslambda.log import eprint, log
 
 
 class EventSourceFactory:
@@ -28,7 +28,7 @@ class EventSourceFactory:
             eprint('docker-lambda.source.unknown source=%s' % source)
             sys.exit(1)
         else:
-            eprint('docker-lambda.source.selected source=%s' % source)
+            log('docker-lambda.source.selected source=%s' % source)
         if source == 'filesystem':
             source = FilesystemEventSource()
         elif source == 'kinesis':

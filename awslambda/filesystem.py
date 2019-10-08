@@ -2,7 +2,7 @@ import os
 import sys
 import time
 
-from awslambda.logging import eprint
+from awslambda.log import eprint, log
 
 
 class FilesystemEventSource:
@@ -27,19 +27,20 @@ class FilesystemEventSource:
         ]
         self.files.sort()
         self.index = 0
-        eprint("docker-lambda.source.filesystem.start folder=%s files=%s loop=%s period=%s" % (
+        log("docker-lambda.source.filesystem.start folder=%s files=%s loop=%s period=%s" % (
             self.folder_name,
             len(self.files),
             self.loop,
             self.period
         ))
+        self.is_done = False
 
     def poll(self):
         if len(self.files) > 0:
             if self.index < len(self.files):
                 with open(self.files[self.index], 'r') as fd:
                     events = fd.read()
-                eprint("docker-lambda.source.filesystem.done.event-loaded folder=%s file=%s" % (
+                log("docker-lambda.source.filesystem.done.event-loaded folder=%s file=%s" % (
                     self.folder_name,
                     self.files[self.index]
                 ))
@@ -47,12 +48,12 @@ class FilesystemEventSource:
                 if self.index >= len(self.files):
                     if self.loop:
                         self.index = 0
-                        eprint("docker-lambda.source.filesystem.done.rewind folder=%s loop=%s" % (
+                        log("docker-lambda.source.filesystem.done.rewind folder=%s loop=%s" % (
                             self.folder_name,
                             self.loop
                         ))
                     else:
-                        eprint(
+                        log(
                             "docker-lambda.source.filesystem.done.no-more-files "
                             "folder=%s loop=%s exit-policy=%s" % (
                                 self.folder_name,
@@ -64,10 +65,13 @@ class FilesystemEventSource:
                             while True:
                                 time.sleep(30)
                         else:
-                            eprint("docker-lambda.source.filesystem.exit")
-                            sys.exit(0)
+                            log("docker-lambda.source.filesystem.done")
+                            self.is_done = True
         else:
             eprint("docker-lambda.source.filesystem.error.no-files folder=%s" % self.folder_name)
             sys.exit(1)
         time.sleep(self.period)
         return events
+
+    def done(self):
+        return self.is_done

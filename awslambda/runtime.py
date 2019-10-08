@@ -1,5 +1,8 @@
 from __future__ import print_function
 import sys
+# Do this here so that we can import all the things we need for our runtime
+# sys.path will get overwritten in the lambda execution context for the handler
+sys.path.insert(0, '/var/runtime')
 import os
 import random
 import uuid
@@ -7,7 +10,7 @@ import time
 import resource
 import datetime
 
-from awslambda.logging import eprint, orig_stdout, orig_stderr
+from awslambda.log import eprint, orig_stdout, orig_stderr
 from awslambda.events import EventSourceFactory
 
 
@@ -99,8 +102,10 @@ def report_user_invoke_end():
 
 
 def receive_start():
+    global _GLOBAL_INVOKED
     sys.stdout = orig_stderr
     sys.stderr = orig_stderr
+    _GLOBAL_INVOKEID = _random_invoke_id()
     return (
         _GLOBAL_INVOKEID,
         _GLOBAL_MODE,
@@ -122,15 +127,14 @@ def receive_invoke():
             "START RequestId: %s Version: %s" %
             (_GLOBAL_INVOKEID, _GLOBAL_VERSION)
         )
-        # Don't exit afer a single invocation
-        #_GLOBAL_INVOKED = True
+        _GLOBAL_INVOKED = True
         _GLOBAL_START_TIME = time.time()
 
     return (
         _GLOBAL_INVOKEID,
         _GLOBAL_DATA_SOCK,
         _GLOBAL_CREDENTIALS,
-        _GLOBAL_EVENT_POLLER.poll(),
+        _GLOBAL_EVENT_SOURCE.poll(),
         _GLOBAL_CONTEXT_OBJS,
         _GLOBAL_INVOKED_FUNCTION_ARN,
         _GLOBAL_XRAY_TRACE_ID,
@@ -167,7 +171,11 @@ def report_done(invokeid, errortype, result, is_fatal):
         )
         if result:
             print('\n' + result, file=orig_stdout)
-        sys.exit(1 if _GLOBAL_ERRORED else 0)
+        if _GLOBAL_EVENT_SOURCE.done():
+            sys.exit(1 if _GLOBAL_ERRORED else 0)
+        else:
+            _GLOBAL_INVOKED = False
+            _GLOBAL_ERRORED = False
     else:
         return
 

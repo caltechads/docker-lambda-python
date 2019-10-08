@@ -82,3 +82,6 @@ class KinesisEventSource:
             })
 
         return events
+
+    def done(self):
+        return False

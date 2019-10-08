@@ -5,6 +5,8 @@ VERSION = $(IMAGE_TAG)-build$(BUILD)
 
 REPOSITORY = caltechads/$(PACKAGE)
 
+.PHONY: test run 
+
 #======================================================================
 
 clean:
@@ -34,7 +36,10 @@ push: tag
 	docker push ${REPOSITORY}
 
 run:
-	docker run -ti --entrypoint bash ${PACKAGE}:${IMAGE_TAG}
+	docker run --rm -ti --entrypoint bash ${PACKAGE}:${IMAGE_TAG}
+
+test:
+	docker run --rm -v "${PWD}"/test:/var/task ${PACKAGE}:${IMAGE_TAG} lambda_function.handler
 
 dev:
 	docker-compose up

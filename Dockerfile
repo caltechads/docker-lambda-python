@@ -5,6 +5,9 @@ RUN rm /var/runtime/awslambda/runtime.cpython-36m-x86_64-linux-gnu.so && \
 	mkdir -p /data 
 COPY awslambda/* /var/runtime/awslambda/
 
+# Uncomment this for sys.path debugging
+#COPY src/awslambda/bootstrap.py /var/runtime/awslambda/bootstrap.py
+
 USER sbx_user1051
 
 # You have to unset PYTHONPATH here because it is set as an ENV in

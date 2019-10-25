@@ -20,7 +20,7 @@ behaviors – even the user and running process are the same.
 ## Available image tags in Docker Hub
 
  * `caltechads/docker-python-lambda:python3.6`: the latest version of the image
- * `caltechads/docker-python-lambda:python3.6-build2`: the specific tag of latest version of the
+ * `caltechads/docker-python-lambda:python3.6-build3`: the specific tag of latest version of the
    image.  Use this is you want to pin to a specific build of
    `caltechads/docker-lambda-python:python:3.6
 

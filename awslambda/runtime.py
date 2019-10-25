@@ -122,6 +122,8 @@ def receive_invoke():
     global _GLOBAL_INVOKED
     global _GLOBAL_START_TIME
 
+    # Do this here so we don't impact _GLOBAL_START_TIME by event sources that do time.sleep()
+    event = _GLOBAL_EVENT_SOURCE.poll()
     if not _GLOBAL_INVOKED:
         eprint(
             "START RequestId: %s Version: %s" %
@@ -134,7 +136,7 @@ def receive_invoke():
         _GLOBAL_INVOKEID,
         _GLOBAL_DATA_SOCK,
         _GLOBAL_CREDENTIALS,
-        _GLOBAL_EVENT_SOURCE.poll(),
+        event,
         _GLOBAL_CONTEXT_OBJS,
         _GLOBAL_INVOKED_FUNCTION_ARN,
         _GLOBAL_XRAY_TRACE_ID,

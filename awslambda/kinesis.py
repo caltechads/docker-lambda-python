@@ -1,7 +1,13 @@
+from base64 import b64encode
 import os
+import sys
 import time
+import json
 
 import boto3
+import botocore.exceptions
+
+from awslambda.log import eprint, log
 
 
 class KinesisEventSource:
@@ -23,11 +29,15 @@ class KinesisEventSource:
     endpoint, allowing you to use kinesalite to simulate a Kinesis stream locally.
     """
     def __init__(self):
-        self.stream_name = os.environ['KINESIS_self.stream_name']
+        self.stream_name = os.environ['KINESIS_STREAM_NAME']
         self.region = os.environ.get('AWS_REGION', os.environ.get('AWS_DEFAULT_REGION', 'us-east-1'))
         access_key_id = os.environ.get('AWS_ACCESS_KEY_ID', 'SOME_ACCESS_KEY_ID')
         secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY', 'SOME_SECRET_ACCESS_KEY')
-
+        endpoint_url = os.environ.get('KINESIS_ENDPOINT_URL', None)
+        log("docker-lambda.source.kinesis.start stream_name=%s %s" % (
+            self.stream_name,
+            "endpoint_url=%s" % endpoint_url if endpoint_url else ''
+        ))
         self.kinesis = boto3.client(
             'kinesis',
             aws_access_key_id=access_key_id,
@@ -36,15 +46,31 @@ class KinesisEventSource:
             endpoint_url=os.environ.get('KINESIS_ENDPOINT_URL', None)
         )
         waiter = self.kinesis.get_waiter('stream_exists')
-        waiter.wait(StreamName=self.stream_name)
+        started = False
+        count = 0
+        while not started:
+            try:
+                waiter.wait(StreamName=self.stream_name)
+            except botocore.exceptions.WaiterError:
+                # If we're using a Kinesalite container, it may take a little while for it to
+                # boot and create its stream.  Give it a
+                log("docker-lambda.source.kinesis.stream.not-ready stream_name=%s")
+                time.sleep(2)
+                count += 1
+                if count == 10:
+                    raise
+            else:
+                started = True
         stream = self.kinesis.describe_stream(StreamName=self.stream_name)
         self.stream_arn = stream['StreamDescription']['StreamARN']
         shards = self.kinesis.list_shards(StreamName=self.stream_name)
         self.shard_id = shards['Shards'][0]['ShardId']
         self.shard_iterator = self.kinesis.get_shard_iterator(
             StreamName=self.stream_name,
-            ShardId=self.shard_id
+            ShardId=self.shard_id,
+            ShardIteratorType='LATEST'
         )
+        log("docker-lambda.source.kinesis.stream.ready stream_name=%s" % self.stream_name)
 
     def poll(self):
         """
@@ -52,9 +78,12 @@ class KinesisEventSource:
         go back to waiting for records.
         """
         while 1:
-            records = self.kinesis.get_records(ShardIterator=self.shard_iterator)
-            if records:
+            records = self.kinesis.get_records(ShardIterator=self.shard_iterator['ShardIterator'])
+            if len(records['Records']) > 0:
                 break
+            log(
+                "docker-lambda.source.kinesis.stream.poll.no-events stream_name=%s" % (self.stream_name)
+            )
             # For standard iterators, Lambda polls each shard in your Kinesis stream for records at a base rate of once
             # per second.  When more records are available, Lambda keeps processing batches until it receives a batch
             # that's smaller than the configured maximum batch size. The function shares read throughput with other
@@ -69,7 +98,7 @@ class KinesisEventSource:
                     "kinesisSchemaVersion": "1.0",
                     "partitionKey": "1",
                     "sequenceNumber": krecord['SequenceNumber'],
-                    "data": krecord['Data'],
+                    "data": b64encode(krecord['Data']).decode(),
                     "approximateArrivalTimestamp": krecord['ApproximateArrivalTimestamp'].timestamp()
                 },
                 "eventSource": "aws:kinesis",
@@ -81,7 +110,10 @@ class KinesisEventSource:
                 "eventSourceARN": self.stream_arn
             })
 
-        return events
+        log(
+            "docker-lambda.source.kinesis.stream.poll stream_name=%s nevents=%s" % (self.stream_name, len(events['Records']))
+        )
+        return json.dumps(events).encode('utf8')
 
     def done(self):
         return False

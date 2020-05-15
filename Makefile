@@ -1,6 +1,6 @@
 PACKAGE = docker-lambda-python
 IMAGE_TAG = python3.6
-BUILD = 3
+BUILD = 4
 VERSION = $(IMAGE_TAG)-build$(BUILD)
 
 REPOSITORY = caltechads/$(PACKAGE)

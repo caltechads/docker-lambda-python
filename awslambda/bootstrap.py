@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-aws_lambda.bootstrap.py
-Amazon Lambda
-
-Copyright (c) 2013 Amazon. All rights reserved.
-
-Lambda runtime implementation
+Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 """
+
 from __future__ import print_function
 
 import decimal
@@ -26,7 +22,7 @@ import runtime as lambda_runtime
 import wsgi
 
 
-def _get_handlers(handler, mode):
+def _get_handlers(handler, mode, invokeid, throttled=False):
     lambda_runtime.report_user_init_start()
     init_handler = lambda: None
 
@@ -69,6 +65,21 @@ def _get_handlers(handler, mode):
     except Exception as e:
         request_handler = load_handler_failed_handler(e, modname)
         lambda_runtime.report_user_init_end()
+        # if the module load failed, usually we'd defer the error to the first INVOKE
+        # if the throttled flag is set, there's another service tracking error states,
+        # so we'll report the fault and exit to fail the INIT.
+        #
+        # request_handler constructed by load_handler_failed handler should always throw wsgi.FaultException.
+        # This exception type has a .fatal field which signals if the runtime believes the error is not rety-able.
+        # the report_fault helper returns this as it's 3rd return value.
+        if throttled:
+            try:
+                request_handler()
+            except Exception as e:
+                errortype, result, fatal = report_fault(invokeid, e)
+                if fatal:
+                    lambda_runtime.report_done(invokeid, errortype, result, 1)
+                    sys.exit(1)
         return init_handler, request_handler
     finally:
         if file_handle is not None:
@@ -182,12 +193,12 @@ def force_path_importer_cache_update():
 
 
 def wait_for_start():
-    (invokeid, mode, handler, suppress_init, credentials) = lambda_runtime.receive_start()
+    (invokeid, mode, handler, suppress_init, throttled, credentials) = lambda_runtime.receive_start()
     force_path_importer_cache_update()
     set_environ(credentials)
     lambda_runtime.report_running(invokeid)
 
-    return (invokeid, mode, handler, suppress_init, credentials)
+    return (invokeid, mode, handler, suppress_init, throttled, credentials)
 
 
 def wait_for_invoke():
@@ -260,6 +271,26 @@ def handle_http_request(request_handler, invokeid, sockfd):
 def to_json(obj):
     return json.dumps(obj, default=decimal_serializer)
 
+# convert an exception into a fault response, and report to the slicer
+# returns error_type (string), result (json repsonse), and fatal (boolean)
+def report_fault(invokeid, e):
+    fatal = False
+    if isinstance(e, wsgi.FaultException):
+        lambda_runtime.report_fault(invokeid, e.msg, e.except_value, None)
+        report_xray_fault_helper("LambdaValidationError", e.msg, [])
+        result = make_error(e.msg, None, None)
+        result = to_json(result)
+        errortype = "unhandled"
+        fatal = e.fatal
+    elif isinstance(e, JsonError):
+        result = report_fault_helper(invokeid, e.exc_info, e.msg)
+        result = to_json(result)
+        errortype = "unhandled"
+    else:
+        result = report_fault_helper(invokeid, sys.exc_info(), None)
+        result = to_json(result)
+        errortype = "unhandled"
+    return errortype, result, fatal
 
 def handle_event_request(request_handler, invokeid, event_body, context_objs, invoked_function_arn):
     lambda_runtime.report_user_invoke_start()
@@ -273,21 +304,9 @@ def handle_event_request(request_handler, invokeid, event_body, context_objs, in
         json_input = try_or_raise(lambda: json.loads(event_body), "Unable to parse input as json")
         result = request_handler(json_input, context)
         result = try_or_raise(lambda: to_json(result), "An error occurred during JSON serialization of response")
-    except wsgi.FaultException as e:
-        lambda_runtime.report_fault(invokeid, e.msg, e.except_value, None)
-        report_xray_fault_helper("LambdaValidationError", e.msg, [])
-        result = make_error(e.msg, None, None)
-        result = to_json(result)
-        errortype = "unhandled"
-        fatal = e.fatal
-    except JsonError as e:
-        result = report_fault_helper(invokeid, e.exc_info, e.msg)
-        result = to_json(result)
-        errortype = "unhandled"
     except Exception as e:
-        result = report_fault_helper(invokeid, sys.exc_info(), None)
-        result = to_json(result)
-        errortype = "unhandled"
+        errortype, result, fatal = report_fault(invokeid, e)
+
     lambda_runtime.report_user_invoke_end()
     lambda_runtime.report_done(invokeid, errortype, result, 1 if fatal else 0)
     if fatal:
@@ -557,11 +576,12 @@ def main():
         "_LAMBDA_LOG_FD",
         "_LAMBDA_SB_ID",
         "_LAMBDA_CONSOLE_SOCKET",
-        "_LAMBDA_RUNTIME_LOAD_TIME"
+        "_LAMBDA_RUNTIME_LOAD_TIME",
+        "_LAMBDA_DISABLE_INTERNAL_LOGGING"
     ]:
-        del os.environ[env]
+        os.environ.pop(env, None)
 
-    (invokeid, mode, handler, suppress_init, credentials) = wait_for_start()
+    (invokeid, mode, handler, suppress_init, throttled, credentials) = wait_for_start()
 
     set_default_sys_path()
     add_default_site_directories()
@@ -570,7 +590,7 @@ def main():
     if suppress_init:
         init_handler, request_handler = lambda: None, None
     else:
-        init_handler, request_handler = _get_handlers(handler, mode)
+        init_handler, request_handler = _get_handlers(handler, mode, invokeid, throttled)
     run_init_handler(init_handler, invokeid)
     lambda_runtime.report_done(invokeid, None, None, 0)
     log_info("init complete at epoch {0}".format(int(round(time.time() * 1000))))
@@ -586,7 +606,7 @@ def main():
 
         # If the handler hasn't been loaded yet, due to init suppression, load it now.
         if request_handler is None:
-            init_handler, request_handler = _get_handlers(handler, mode)
+            init_handler, request_handler = _get_handlers(handler, mode, invokeid)
             run_init_handler(init_handler, invokeid)
 
         if mode == "http":
@@ -598,3 +618,4 @@ def main():
 if __name__ == '__main__':
     log_info("main started at epoch {0}".format(int(round(time.time() * 1000))))
     main()
+

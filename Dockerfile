@@ -1,8 +1,7 @@
 FROM lambci/lambda:build-python3.6
 
-RUN rm /var/runtime/awslambda/runtime.cpython-36m-x86_64-linux-gnu.so && \
-	pip install boto3 python-dateutil six && \
-	mkdir -p /data 
+RUN pip install boto3 python-dateutil six && \
+	mkdir -p /data
 COPY awslambda/* /var/runtime/awslambda/
 
 # Uncomment this for sys.path debugging

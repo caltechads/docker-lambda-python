@@ -2,12 +2,12 @@ from __future__ import print_function
 import os
 import sys
 
-orig_stdout = sys.stdout
-orig_stderr = sys.stderr
+ORIG_STDOUT = sys.stdout
+ORIG_STDERR = sys.stderr
 
 
 def eprint(*args, **kwargs):
-    print(*args, file=orig_stderr, **kwargs)
+    print(*args, file=ORIG_STDERR, **kwargs)
 
 
 def log(*args, **kwargs):

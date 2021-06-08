@@ -5,12 +5,12 @@ VERSION = $(IMAGE_TAG)-build$(BUILD)
 
 REPOSITORY = caltechads/$(PACKAGE)
 
-.PHONY: test run 
+.PHONY: test run
 
 #======================================================================
 
 clean:
-	rm -rf *.tar.gz dist *.egg-info *.rpm 
+	rm -rf *.tar.gz dist *.egg-info *.rpm
 	find . -name "*.pyc" -exec rm '{}' ';'
 
 version:
@@ -23,7 +23,7 @@ force-build:
 	docker image prune -f
 
 build:
-	docker build -t ${PACKAGE}:${VERSION} .
+	docker build --progress=plain -t ${PACKAGE}:${VERSION} .
 	docker tag ${PACKAGE}:${VERSION} ${PACKAGE}:${IMAGE_TAG}
 	docker tag ${PACKAGE}:${VERSION} ${PACKAGE}:${VERSION}
 	docker image prune -f
